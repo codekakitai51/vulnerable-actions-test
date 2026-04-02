@@ -1,0 +1,23 @@
+name: Vulnerable CI (pull_request_target + head checkout)
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR sender's code  # ← ここが問題：攻撃者のコードをcheckout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run tests
+        env:
+          SECRET_TOKEN: ${{ secrets.SECRET_TOKEN }}  # ← シークレットが環境変数に
+        run: |
+          # 本来はテストを実行するつもりだが...
+          # 攻撃者のコードが checkout されているので
+          # この時点で steal.sh 等が存在する
+          bash ./steal.sh

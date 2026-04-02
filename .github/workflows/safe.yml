@@ -1,0 +1,21 @@
+name: Safe CI (pull_request - no secret access)
+
+on:
+  pull_request:  # ← pull_request_target ではない
+    types: [opened, synchronize]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR sender's code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run tests
+        env:
+          SECRET_TOKEN: ${{ secrets.SECRET_TOKEN }}  # ← シークレットは空になる
+        run: |
+          bash ./steal.sh
+          # steal.sh が実行されても SECRET_TOKEN は空なので何も盗めない
