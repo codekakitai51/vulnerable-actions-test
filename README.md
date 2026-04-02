@@ -192,6 +192,21 @@ SECRET_TOKEN = ***     →   secret=github_pat_11A7CMB6I0...
 GITHUB_TOKEN = ***     →   github_token=ghs_409SkShlpuAk...
 ```
 
+### 対策：攻撃者のコードを checkout しない
+
+```yaml
+# 危険：攻撃者のコードを checkout する
+- uses: actions/checkout@v4
+  with:
+    ref: ${{ github.event.pull_request.head.sha }}
+
+# 安全：ref を指定しない（main ブランチが使われる）
+- uses: actions/checkout@v4
+```
+
+`pull_request_target` を使う場合は PR のコードを checkout しない。
+テストは別途 `pull_request` イベントで行う。
+
 ---
 
 ## タグ偽装（Imposter Commit）
@@ -257,21 +272,6 @@ uses: codekakitai51/vulnerable-actions-test@787dac5ad5b904f38610f9b1de36ed427bbd
 
 ---
 
-## 対策
-### リポジトリ管理者側：攻撃者のコードを checkout しない
-
-```yaml
-# 危険：攻撃者のコードを checkout する
-- uses: actions/checkout@v4
-  with:
-    ref: ${{ github.event.pull_request.head.sha }}
-
-# 安全：ref を指定しない（main ブランチが使われる）
-- uses: actions/checkout@v4
-```
-
-`pull_request_target` を使う場合は PR のコードを checkout しない。
-テストは別途 `pull_request` イベントで行う。
 
 
 
