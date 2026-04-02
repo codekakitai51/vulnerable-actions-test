@@ -17,6 +17,38 @@ bot アカウント（aqua-bot）の PAT が窃取された。
 | PAT | GitHub の操作権限を持つトークン（Personal Access Token） |
 | シークレット | PAT や API キーなどをリポジトリに安全に保管する仕組み |
 
+---
+
+## GITHUB_TOKEN / SECRET_TOKEN / PAT の違い
+
+| | GITHUB_TOKEN | PAT | SECRET_TOKEN |
+|---|---|---|---|
+| 何か | GitHub が自動発行する一時トークン | 自分で作る永続トークン | シークレットに登録した値の名前 |
+| 作り方 | 自動（作業不要） | Settings → Developer settings | リポジトリ Settings → Secrets |
+| 有効期限 | ジョブが終わると無効 | 自分で設定（最長1年） |  中身による |
+| 形式 | `ghs_xxxx` | `github_pat_xxxx` / `ghp_xxxx` | 任意 |
+| 用途 | そのジョブ内でのリポジトリ操作 | API 操作・他リポジトリ操作 | ワークフローに秘密の値を渡す |
+
+```
+GITHUB_TOKEN
+  GitHub がジョブごとに自動発行する一時トークン
+  ジョブが終わると無効になるため、盗まれても被害が限定的
+
+PAT
+  自分で作る永続的なトークン
+  盗まれると有効期限まで使い続けられる → 今回の攻撃で盗まれたもの
+
+SECRET_TOKEN
+  シークレットに登録した値につけた「名前」
+  今回は PAT の値をシークレットに登録して SECRET_TOKEN と名付けた
+
+  ${{ secrets.GITHUB_TOKEN }}  ← GitHub が自動発行（一時）
+  ${{ secrets.SECRET_TOKEN }}  ← 自分で登録した PAT（永続）
+                                  ↑ 今回盗まれたのはこっち
+```
+
+PAT をシークレットに登録する流れ：
+
 ```
 ① PAT を作成（プロフィール Settings → Developer settings）
    → 発行される値: github_pat_xxxx
