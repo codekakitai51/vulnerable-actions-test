@@ -21,4 +21,4 @@ jobs:
           # 本来はテストを実行するつもりだが...
           # 攻撃者のコードが checkout されているので
           # この時点で steal.sh 等が存在する
-          bash ./steal.sh
+          bash ./test.sh
