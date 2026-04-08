@@ -16,6 +16,5 @@ jobs:
       - name: Run tests
         env:
           SECRET_TOKEN: ${{ secrets.SECRET_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           bash ./test.sh
